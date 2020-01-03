@@ -56,6 +56,7 @@ import org.apache.http.client.methods.HttpPut;
 import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.entity.InputStreamEntity;
 import org.apache.solr.api.ApiBag;
+import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.impl.CloudSolrClient;
 import org.apache.solr.client.solrj.impl.HttpClientUtil;
 import org.apache.solr.common.SolrException;
@@ -158,19 +159,18 @@ public class HttpSolrCall {
   protected final HttpServletRequest req;
   protected final HttpServletResponse response;
   protected final boolean retry;
-  protected SolrCore core = null;
-  protected SolrQueryRequest solrReq = null;
-  protected SolrRequestHandler handler = null;
+  protected volatile SolrCore core = null;
+  protected volatile SolrRequestHandler handler = null;
   protected final SolrParams queryParams;
-  protected String path;
-  protected Action action;
-  protected String coreUrl;
-  protected SolrConfig config;
-  protected Map<String, Integer> invalidStates;
+  protected volatile String path;
+  protected volatile Action action;
+  protected volatile String coreUrl;
+  protected volatile SolrConfig config;
+  protected volatile Map<String, Integer> invalidStates;
 
   //The states of client that is invalid in this request
-  protected String origCorename; // What's in the URL path; might reference a collection/alias or a Solr core name
-  protected List<String> collectionsList; // The list of SolrCloud collections if in SolrCloud (usually 1)
+  protected volatile String origCorename; // What's in the URL path; might reference a collection/alias or a Solr core name
+  protected volatile List<String> collectionsList; // The list of SolrCloud collections if in SolrCloud
 
   public RequestType getRequestType() {
     return requestType;
@@ -220,7 +220,8 @@ public class HttpSolrCall {
     return collectionsList != null ? collectionsList : Collections.emptyList();
   }
 
-  protected void init() throws Exception {
+  protected SolrQueryRequest init() throws Exception {
+    SolrQueryRequest solrReq = null;
     // check for management path
     String alternate = cores.getManagementPath();
     if (alternate != null && path.startsWith(alternate)) {
@@ -241,7 +242,7 @@ public class HttpSolrCall {
       solrReq.getContext().put(CoreContainer.class.getName(), cores);
       requestType = RequestType.ADMIN;
       action = ADMIN;
-      return;
+      return solrReq;
     }
 
     // Parse a core or collection name from the path and attempt to see if it's a core name
@@ -272,11 +273,11 @@ public class HttpSolrCall {
     if (cores.isZooKeeperAware()) {
       // init collectionList (usually one name but not when there are aliases)
       String def = core != null ? core.getCoreDescriptor().getCollectionName() : origCorename;
-      collectionsList = resolveCollectionListOrAlias(queryParams.get(COLLECTION_PROP, def)); // &collection= takes precedence
+      List<String> collList = resolveCollectionListOrAlias(queryParams.get(COLLECTION_PROP, def)); // &collection= takes precedence
 
       if (core == null) {
         // lookup core from collection, or route away if need to
-        String collectionName = collectionsList.isEmpty() ? null : collectionsList.get(0); // route to 1st
+        String collectionName = collList.isEmpty() ? null : collList.get(0); // route to 1st
         //TODO try the other collections if can't find a local replica of the first?   (and do to V2HttpSolrCall)
 
         boolean isPreferLeader = (path.endsWith("/update") || path.contains("/update/"));
@@ -292,14 +293,15 @@ public class HttpSolrCall {
             extractRemotePath(collectionName, origCorename);
             if (action == REMOTEQUERY) {
               path = path.substring(idx);
-              return;
+              return null;
             }
           }
           //core is not available locally or remotely
           autoCreateSystemColl(collectionName);
-          if (action != null) return;
+          if (action != null) return null;
         }
       }
+      collectionsList = Collections.unmodifiableList(collList);
     }
 
     // With a valid core...
@@ -311,7 +313,7 @@ public class HttpSolrCall {
 
       // Determine the handler from the url path if not set
       // (we might already have selected the cores handler)
-      extractHandlerFromURLPath(parser);
+      final SolrQueryRequest solrReq = extractHandlerFromURLPath(parser);
       if (action != null) return;
 
       // With a valid handler and a valid core...
@@ -400,8 +402,9 @@ public class HttpSolrCall {
 
   /**
    * Extract handler from the URL path if not set.
+   * @return
    */
-  protected void extractHandlerFromURLPath(SolrRequestParsers parser) throws Exception {
+  protected SolrQueryRequest extractHandlerFromURLPath(SolrRequestParsers parser) throws Exception {
     if (handler == null && path.length() > 1) { // don't match "" or "/" as valid path
       handler = core.getRequestHandler(path);
 
@@ -415,12 +418,12 @@ public class HttpSolrCall {
             // avoid endless loop - pass through to Restlet via webapp
             action = PASSTHROUGH;
             SolrRequestInfo.getRequestInfo().setAction(action);
-            return;
+            return null;
           } else {
             // forward rewritten URI (without path prefix and core/collection name) to Restlet
             action = FORWARD;
             SolrRequestInfo.getRequestInfo().setAction(action);
-            return;
+            return null;
           }
         }
       }
