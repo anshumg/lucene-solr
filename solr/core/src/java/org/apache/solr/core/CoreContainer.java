@@ -67,6 +67,7 @@ import org.apache.solr.cloud.CloudDescriptor;
 import org.apache.solr.cloud.Overseer;
 import org.apache.solr.cloud.OverseerTaskQueue;
 import org.apache.solr.cloud.ZkController;
+import org.apache.solr.cloud.admin.CollectionAdmin;
 import org.apache.solr.cloud.autoscaling.AutoScalingHandler;
 import org.apache.solr.common.AlreadyClosedException;
 import org.apache.solr.common.SolrException;
@@ -232,6 +233,7 @@ public class CoreContainer {
   private PackageStoreAPI packageStoreAPI;
   private PackageLoader packageLoader;
 
+  private CollectionAdmin collectionAdmin;
 
   // Bits for the state variable.
   public final static long LOAD_COMPLETE = 0x1L;
@@ -575,6 +577,8 @@ public class CoreContainer {
   public PackageStoreAPI getPackageStoreAPI() {
     return packageStoreAPI;
   }
+
+  public CollectionAdmin getCollectionAdmin() { return collectionAdmin; }
   //-------------------------------------------------------------------
   // Initialization / Cleanup
   //-------------------------------------------------------------------
@@ -650,6 +654,9 @@ public class CoreContainer {
       packageLoader = new PackageLoader(this);
       containerHandlers.getApiBag().register(new AnnotatedApi(packageLoader.getPackageAPI().editAPI), Collections.EMPTY_MAP);
       containerHandlers.getApiBag().register(new AnnotatedApi(packageLoader.getPackageAPI().readAPI), Collections.EMPTY_MAP);
+      collectionAdmin = new CollectionAdmin(this);
+      log.info("Registering the new API - Anshum - {}", collectionAdmin.list);
+      containerHandlers.getApiBag().register(new AnnotatedApi(collectionAdmin.list), Collections.EMPTY_MAP);
     }
 
     MDCLoggingContext.setNode(this);

@@ -70,7 +70,7 @@ public class V2HttpCall extends HttpSolrCall {
   List<String> pieces;
   private String prefix;
   HashMap<String, String> parts = new HashMap<>();
-  static final Set<String> knownPrefixes = ImmutableSet.of("cluster", "node", "collections", "cores", "c");
+  static final Set<String> knownPrefixes = ImmutableSet.of("cluster", "node", "collections", "cores", "c", "collectionsv2");
 
   public V2HttpCall(SolrDispatchFilter solrDispatchFilter, CoreContainer cc,
                     HttpServletRequest request, HttpServletResponse response, boolean retry) {
