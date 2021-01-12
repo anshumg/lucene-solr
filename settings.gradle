@@ -61,6 +61,7 @@ include "solr:server"
 include "solr:contrib:analysis-extras"
 include "solr:contrib:analytics"
 include "solr:contrib:clustering"
+include 'solr:contrib:solr-crossdc'
 include "solr:contrib:extraction"
 include "solr:contrib:langid"
 include "solr:contrib:jaegertracer-configurator"
@@ -75,3 +76,4 @@ include "solr:documentation"
 include "solr:packaging"
 include "solr:docker"
 include "solr:docker:package"
+
